@@ -1,0 +1,8 @@
+Review Id
+Source (URL)
+Title (topic about which the review is about)
+Text
+Date
+Annotator 1
+Annotator 2
+Annotator 3
