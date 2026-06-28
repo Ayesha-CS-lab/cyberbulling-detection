@@ -83,6 +83,7 @@ def get_classification_report(y_true, y_pred_probs, threshold=0.5):
         report += f"--- {name} ---\n"
         report += classification_report(
             y_true[:, i], y_pred[:, i],
+            labels=[0, 1],
             target_names=['Non-Bullying', 'Bullying'],
             zero_division=0
         )
@@ -107,6 +108,6 @@ def get_confusion_matrices(y_true, y_pred_probs, threshold=0.5):
 
     matrices = {}
     for i, name in enumerate(LABEL_NAMES):
-        matrices[name] = confusion_matrix(y_true[:, i], y_pred[:, i])
+        matrices[name] = confusion_matrix(y_true[:, i], y_pred[:, i], labels=[0, 1])
 
     return matrices
