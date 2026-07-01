@@ -1,0 +1,4 @@
+Stage 1 baselines on messages.csv (binary aggression)
+Seed=42, test_split=0.15
+
+SVM + TF-IDF: acc 0.8466 P 0.7632 R 0.8119 F1 0.7868

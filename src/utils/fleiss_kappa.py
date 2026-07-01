@@ -58,50 +58,67 @@ def interpret_kappa(kappa):
         return "Almost perfect agreement"
 
 
-def calculate_from_dataset(excel_path='data/Roman annotated data.xlsx'):
+def _build_ratings_matrix(votes_df, categories):
+    """Build an (N, k) Fleiss matrix: cell = how many raters chose that category."""
+    cat_index = {c: j for j, c in enumerate(categories)}
+    n_items = len(votes_df)
+    matrix = np.zeros((n_items, len(categories)), dtype=int)
+    for i, (_, row) in enumerate(votes_df.iterrows()):
+        for v in row:
+            matrix[i, cat_index[v]] += 1
+    return matrix
+
+
+def calculate_from_dataset(excel_path='data/Roman annotated data.xlsx',
+                           binary_map=None):
     """
     Calculate Fleiss' Kappa from the annotated dataset.
-    Expects columns: 'Annotator 1', 'Annotator 2', 'Annotator 3'
-    with binary labels (0 or 1).
+
+    The annotators used THREE labels (0, 1, 2). By default this computes the
+    assumption-free 3-category Kappa. If `binary_map` is given (a dict mapping
+    each raw label to 0/1), a collapsed binary Kappa is computed instead so the
+    result can be reported on a 'bullying / non-bullying' scale once the meaning
+    of the labels is confirmed.
     """
     print(f"Reading {excel_path}...")
     df = pd.read_excel(excel_path)
+    cols = ['Annotator 1', 'Annotator 2', 'Annotator 3']
 
-    # Extract annotator columns
-    a1 = df['Annotator 1'].fillna(0).astype(int)
-    a2 = df['Annotator 2'].fillna(0).astype(int)
-    a3 = df['Annotator 3'].fillna(0).astype(int)
+    votes = df[cols].copy()
+    before = len(votes)
+    votes = votes.dropna()                      # drop rows with a missing rating
+    votes = votes.astype(int)
+    dropped = before - len(votes)
 
-    # Build ratings matrix: shape (N, 2) for binary classification
-    # Column 0 = count of "not bullying" votes, Column 1 = count of "bullying" votes
-    n_items = len(df)
-    ratings_matrix = np.zeros((n_items, 2), dtype=int)
+    if binary_map is not None:
+        votes = votes.applymap(lambda v: binary_map.get(v, v))
 
-    for i in range(n_items):
-        votes = [a1.iloc[i], a2.iloc[i], a3.iloc[i]]
-        bullying_count = sum(votes)
-        non_bullying_count = 3 - bullying_count
-        ratings_matrix[i, 0] = non_bullying_count
-        ratings_matrix[i, 1] = bullying_count
+    categories = sorted(set(votes.values.ravel().tolist()))
+    matrix = _build_ratings_matrix(votes, categories)
+    kappa = fleiss_kappa(matrix)
 
-    kappa = fleiss_kappa(ratings_matrix)
+    # Agreement breakdown (per item, how many raters chose the majority label)
+    def n_agree(row):
+        return max(np.bincount(row.values))
+    agree_counts = votes.apply(n_agree, axis=1)
 
     print("=" * 50)
     print("INTER-ANNOTATOR AGREEMENT (Fleiss' Kappa)")
     print("=" * 50)
-    print(f"Number of items:      {n_items}")
+    print(f"Number of items:      {len(votes)} (dropped {dropped} with missing ratings)")
     print(f"Number of annotators: 3")
-    print(f"Number of categories: 2 (Bullying / Non-Bullying)")
+    print(f"Categories:           {categories}"
+          f"{'  [binary-mapped]' if binary_map else ''}")
     print(f"Fleiss' Kappa:        {kappa:.4f}")
     print(f"Interpretation:       {interpret_kappa(kappa)}")
+    print(f"\nVote distribution per category (raters x items):")
+    for c, count in zip(categories, matrix.sum(axis=0)):
+        print(f"  label {c}: {count}")
+    print(f"\nAgreement breakdown:")
+    print(f"  Unanimous (all 3 agree): {(agree_counts == 3).sum()}")
+    print(f"  Majority  (2 of 3 agree): {(agree_counts == 2).sum()}")
+    print(f"  No agreement (all differ): {(agree_counts == 1).sum()}")
     print("=" * 50)
-
-    # Distribution
-    total_votes = a1 + a2 + a3
-    print(f"\nVote distribution:")
-    print(f"  Unanimous agreement (all 3 agree): {((total_votes == 0) | (total_votes == 3)).sum()}")
-    print(f"  Majority agreement (2 out of 3):   {((total_votes == 1) | (total_votes == 2)).sum()}")
-
     return kappa
 
 

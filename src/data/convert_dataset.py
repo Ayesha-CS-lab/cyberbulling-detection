@@ -11,16 +11,22 @@ def convert_roman_dataset(input_file, output_file):
         return
 
     # 1. Consensus Voting for Aggression
-    # Annotators might have 1, 0, or NaN. Treat NaN as 0.
-    a1 = df['Annotator 1'].fillna(0).astype(int)
-    a2 = df['Annotator 2'].fillna(0).astype(int)
-    a3 = df['Annotator 3'].fillna(0).astype(int)
-    
-    # Sum votes
+    # The three annotators used a 0/1/2 sentiment scale, where level 2 is the
+    # hostile / taunting (negative) class and 0/1 are neutral / positive. For the
+    # aggression task only level 2 counts as aggressive. We map each annotator to a
+    # binary "aggressive" vote (rating == 2) and take a MAJORITY vote (>= 2 of 3) as
+    # the consensus label. NaN ratings are treated as 0 (not aggressive).
+    def _aggressive_vote(col):
+        return (col.fillna(0).astype(float).round().astype(int) == 2).astype(int)
+
+    a1 = _aggressive_vote(df['Annotator 1'])
+    a2 = _aggressive_vote(df['Annotator 2'])
+    a3 = _aggressive_vote(df['Annotator 3'])
+
+    # Majority vote: aggressive only if at least 2 of 3 annotators rated level 2.
     votes = a1 + a2 + a3
-    # If 2 or more votes, class is 1 (Aggressive)
     aggression_labels = (votes >= 2).astype(int)
-    
+
     print(f"Labels distribution:\n{aggression_labels.value_counts()}")
 
     # 2. Construct New DataFrame

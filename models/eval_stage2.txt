@@ -1,0 +1,35 @@
+Stage 2 (user-pair cyberbullying) - dense MLP
+Seed=42 | epochs=200 | lr=0.001 | features=19
+Pairs=9511 positives=992
+
+=== 5-fold stratified cross-validation (mean +/- std) ===
+Accuracy  0.9212 +/- 0.0043
+Precision 0.5724 +/- 0.0131
+Recall    0.9718 +/- 0.0104
+F1        0.7203 +/- 0.0118
+
+  fold 1: acc 0.9149 P 0.5536 R 0.9598 F1 0.7022
+  fold 2: acc 0.9211 P 0.5710 R 0.9899 F1 0.7243
+  fold 3: acc 0.9238 P 0.5801 R 0.9697 F1 0.7259
+  fold 4: acc 0.9190 P 0.5651 R 0.9646 F1 0.7127
+  fold 5: acc 0.9274 P 0.5920 R 0.9747 F1 0.7366
+
+=== Final held-out test split (n=1903) ===
+Accuracy : 0.9207
+Precision: 0.5681
+Recall   : 0.9899
+F1       : 0.7219
+
+Confusion matrix [[TN FP][FN TP]]:
+[[1556  149]
+ [   2  196]]
+
+               precision    recall  f1-score   support
+
+       Not CB       1.00      0.91      0.95      1705
+Cyberbullying       0.57      0.99      0.72       198
+
+     accuracy                           0.92      1903
+    macro avg       0.78      0.95      0.84      1903
+ weighted avg       0.95      0.92      0.93      1903
+

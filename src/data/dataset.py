@@ -52,9 +52,8 @@ class CyberbullyingDataset(Dataset):
         lang = row.get('language', 'en')
         clean_text = self.preprocessor.preprocess(text, lang=lang)
 
-        inputs = self.tokenizer.encode_plus(
+        inputs = self.tokenizer(
             clean_text,
-            None,
             add_special_tokens=True,
             max_length=self.max_len,
             padding='max_length',

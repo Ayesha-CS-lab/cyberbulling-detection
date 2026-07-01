@@ -100,3 +100,55 @@ AFTER TRAINING (GPU recommended):
 
 OPTIONAL LAST:
   10. Build Streamlit demo
+
+
+
+
+
+  Step 1 — Upload to Kaggle
+Go to kaggle.com → Datasets → New Dataset
+Upload kaggle_stage1.zip (Kaggle auto-extracts it)
+Name it e.g. cb-stage1, create it
+Open a new Notebook, set Accelerator → GPU T4 x2, and Add Input → your cb-stage1 dataset
+Step 2 — Setup cell (copy project to writable dir)
+
+import os, shutil, sys
+
+# Find the folder that contains 'src' inside the read-only input
+src_root = None
+for root, dirs, files in os.walk('/kaggle/input'):
+    if 'src' in dirs and os.path.exists(os.path.join(root, 'src', 'train_stage1.py')):
+        src_root = root; break
+print('Found project at:', src_root)
+
+PROJECT = '/kaggle/working/project'
+if os.path.exists(PROJECT): shutil.rmtree(PROJECT)
+shutil.copytree(src_root, PROJECT)
+os.chdir(PROJECT)
+if PROJECT not in sys.path: sys.path.insert(0, PROJECT)
+print('Working dir:', os.getcwd())
+print('messages.csv exists:', os.path.exists('data/processed/messages.csv'))
+Step 3 — Train Stage 1 (m-BERT)
+
+!pip install -q transformers
+from src.train_stage1 import train_stage1
+train_stage1(text_model='bert-base-multilingual-cased', epochs=3, batch_size=16)
+Step 4 — Train Stage 1 (MuRIL)
+
+train_stage1(text_model='google/muril-base-cased', epochs=3, batch_size=16)
+Step 5 — Download the trained models
+
+import os
+print(os.listdir('/kaggle/working/project/models'))
+# You'll see aggression_mbert.pth and aggression_muril.pth
+Then Save Version (commit), and download via the Kaggle API like before:
+
+
+kaggle kernels output <your-username>/<notebook-name> -p ./models
+Place aggression_mbert.pth and aggression_muril.pth into your local models/ folder.
+
+What happens after Stage 1 is trained
+Once you bring those two .pth files back, I'll:
+
+Update demo.py to run the real two-stage pipeline (message → aggression → pair-level cyberbullying decision).
+Write docs/RESULTS.md documenting both stages honestly (Stage 2 numbers are already in hand: 91.6% acc, 0.71 F1).

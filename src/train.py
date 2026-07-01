@@ -109,7 +109,24 @@ def train(
 
     # Model
     model = CyberbullyingDetector(text_model_name=text_model).to(DEVICE)
-    criterion = nn.BCEWithLogitsLoss()
+
+    # --- Class weighting to counter label imbalance ---
+    # pos_weight[i] = (# negative) / (# positive) for label i.
+    # This penalizes the majority-class shortcut so the model learns to
+    # actually discriminate instead of always predicting the dominant class.
+    import pandas as pd
+    label_df = pd.read_csv(csv_path)
+    label_cols = ['aggression', 'repetition', 'intent']
+    pos_weights = []
+    for col in label_cols:
+        pos = int(label_df[col].sum())
+        neg = len(label_df) - pos
+        # If a label has no positives (or no negatives), fall back to 1.0
+        pos_weights.append(neg / pos if pos > 0 else 1.0)
+    pos_weight = torch.tensor(pos_weights, dtype=torch.float).to(DEVICE)
+    print(f"Class pos_weight {label_cols}: {pos_weights}")
+
+    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=WEIGHT_DECAY)
 
     # LR Scheduler

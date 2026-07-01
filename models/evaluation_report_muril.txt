@@ -1,0 +1,52 @@
+============================================================
+CLASSIFICATION REPORT
+============================================================
+
+--- Aggression ---
+              precision    recall  f1-score   support
+
+Non-Bullying       0.00      0.00      0.00        84
+    Bullying       0.72      1.00      0.84       216
+
+    accuracy                           0.72       300
+   macro avg       0.36      0.50      0.42       300
+weighted avg       0.52      0.72      0.60       300
+
+--- Repetition ---
+              precision    recall  f1-score   support
+
+Non-Bullying       1.00      1.00      1.00       300
+    Bullying       0.00      0.00      0.00         0
+
+    accuracy                           1.00       300
+   macro avg       0.50      0.50      0.50       300
+weighted avg       1.00      1.00      1.00       300
+
+--- Intent ---
+              precision    recall  f1-score   support
+
+Non-Bullying       1.00      1.00      1.00       300
+    Bullying       0.00      0.00      0.00         0
+
+    accuracy                           1.00       300
+   macro avg       0.50      0.50      0.50       300
+weighted avg       1.00      1.00      1.00       300
+
+--- Overall (Macro) ---
+  Accuracy:  0.7200
+  Precision: 0.2400
+  Recall:    0.3333
+  F1 Score:  0.2791
+============================================================
+
+Confusion Matrix - Aggression:
+[[  0  84]
+ [  0 216]]
+
+Confusion Matrix - Repetition:
+[[300   0]
+ [  0   0]]
+
+Confusion Matrix - Intent:
+[[300   0]
+ [  0   0]]

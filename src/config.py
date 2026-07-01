@@ -13,6 +13,11 @@ TRAIN_CSV = os.path.join(DATA_DIR, 'train.csv')
 TRAIN_IMDB_CSV = os.path.join(DATA_DIR, 'train_imdb.csv')
 IMAGE_DIR = os.path.join(DATA_DIR, 'images')
 
+# --- Two-stage pipeline (methodology Figure 1) ---
+PROCESSED_DIR = os.path.join(DATA_DIR, 'processed')
+MESSAGES_CSV = os.path.join(PROCESSED_DIR, 'messages.csv')   # Stage 1: message-level aggression
+PAIRS_CSV = os.path.join(PROCESSED_DIR, 'pairs.csv')         # Stage 2: user-pair cyberbullying
+
 # --- Model Selection ---
 MBERT_MODEL = 'bert-base-multilingual-cased'
 MURIL_MODEL = 'google/muril-base-cased'

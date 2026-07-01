@@ -1,237 +1,149 @@
 """
-Baseline models for comparison against the multimodal fusion model.
-Implements SVM + TF-IDF and LSTM baselines.
+Baseline models for the Stage 1 message-level AGGRESSION task.
+
+Provides conventional baselines (SVM + TF-IDF and a BiLSTM) on the SAME
+multilingual binary aggression data (data/processed/messages.csv) that the
+m-BERT / MuRIL transformer uses, so the comparison in Chapter 4 (Table 4.1,
+Section 4.4.2) is like-for-like. Metrics and the split (stratified, seed 42)
+match src/train_stage1.py.
+
+Run:  python -m src.baselines            # SVM (fast)
+      python -m src.baselines --lstm     # also run the BiLSTM (slow on CPU)
 """
+import os
+import sys
 import numpy as np
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.svm import SVC
+from sklearn.svm import LinearSVC
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report, accuracy_score, f1_score
-from sklearn.multiclass import OneVsRestClassifier
-from sklearn.preprocessing import MultiLabelBinarizer
-import os
+from sklearn.metrics import (
+    accuracy_score, precision_recall_fscore_support, confusion_matrix,
+    classification_report,
+)
 
-from src.config import TRAIN_CSV, RANDOM_SEED, TEST_SPLIT
+from src.config import MESSAGES_CSV, RANDOM_SEED, MODEL_DIR
 from src.data.preprocessing import TextPreprocessor
 
-
-LABEL_NAMES = ['Aggression', 'Repetition', 'Intent']
-
-
-def load_and_preprocess(csv_path):
-    """Load data and clean text."""
-    df = pd.read_csv(csv_path)
-    preprocessor = TextPreprocessor()
-
-    texts = []
-    labels = []
-
-    for _, row in df.iterrows():
-        text = str(row['text_content'])
-        lang = row.get('language', 'en')
-        clean = preprocessor.preprocess(text, lang=lang)
-        texts.append(clean)
-        labels.append([
-            int(row.get('aggression', 0)),
-            int(row.get('repetition', 0)),
-            int(row.get('intent', 0))
-        ])
-
-    return texts, np.array(labels)
+TEST_SPLIT = 0.15
 
 
-def svm_baseline(csv_path=None):
-    """
-    SVM + TF-IDF baseline (text-only, no images).
-    Uses One-vs-Rest strategy for multi-label classification.
-    """
-    csv_path = csv_path or TRAIN_CSV
-    print("=" * 60)
-    print("BASELINE: SVM + TF-IDF")
-    print("=" * 60)
-
-    texts, labels = load_and_preprocess(csv_path)
-
-    # Train/test split
-    X_train, X_test, y_train, y_test = train_test_split(
-        texts, labels, test_size=TEST_SPLIT, random_state=RANDOM_SEED
-    )
-
-    # TF-IDF Features
-    print("Extracting TF-IDF features...")
-    tfidf = TfidfVectorizer(max_features=10000, ngram_range=(1, 2))
-    X_train_tfidf = tfidf.fit_transform(X_train)
-    X_test_tfidf = tfidf.transform(X_test)
-
-    # Train SVM (One-vs-Rest for multi-label)
-    print("Training SVM...")
-    svm = OneVsRestClassifier(SVC(kernel='rbf', probability=True, random_state=RANDOM_SEED))
-    svm.fit(X_train_tfidf, y_train)
-
-    # Predict
-    y_pred = svm.predict(X_test_tfidf)
-
-    # Results
-    print("\n--- Results ---")
-    for i, name in enumerate(LABEL_NAMES):
-        print(f"\n{name}:")
-        print(classification_report(
-            y_test[:, i], y_pred[:, i],
-            target_names=['Non-Bullying', 'Bullying'],
-            zero_division=0
-        ))
-
-    accuracy = accuracy_score(y_test, y_pred)
-    f1_macro = f1_score(y_test, y_pred, average='macro', zero_division=0)
-
-    print(f"\nOverall Accuracy: {accuracy:.4f}")
-    print(f"F1 (Macro):       {f1_macro:.4f}")
-
-    return {'accuracy': accuracy, 'f1_macro': f1_macro}
+def _load():
+    df = pd.read_csv(MESSAGES_CSV)
+    pre = TextPreprocessor()
+    texts = [pre.preprocess(str(t), lang=l) for t, l in zip(df['message'], df['language'])]
+    y = df['label'].astype(int).values
+    return np.array(texts, dtype=object), y
 
 
-def lstm_baseline(csv_path=None):
-    """
-    Simple LSTM baseline (text-only, no images).
-    Uses a single-layer LSTM with word embeddings.
-    """
-    csv_path = csv_path or TRAIN_CSV
-    print("\n" + "=" * 60)
-    print("BASELINE: LSTM")
-    print("=" * 60)
+def _report(name, y_true, y_pred):
+    acc = accuracy_score(y_true, y_pred)
+    p, r, f1, _ = precision_recall_fscore_support(y_true, y_pred, average='binary', zero_division=0)
+    print(f"\n--- {name} ---")
+    print(f"Accuracy {acc:.4f} | Precision {p:.4f} | Recall {r:.4f} | F1 {f1:.4f}")
+    print("Confusion [[TN FP][FN TP]]:")
+    print(confusion_matrix(y_true, y_pred, labels=[0, 1]))
+    print(classification_report(y_true, y_pred, labels=[0, 1],
+          target_names=['Non-Aggressive', 'Aggressive'], zero_division=0))
+    return {'name': name, 'acc': acc, 'p': p, 'r': r, 'f1': f1}
 
-    try:
-        import torch
-        import torch.nn as nn
-        from torch.utils.data import DataLoader, TensorDataset
-    except ImportError:
-        print("PyTorch required for LSTM baseline")
-        return None
 
-    texts, labels = load_and_preprocess(csv_path)
+def svm_baseline(texts, y):
+    Xtr, Xte, ytr, yte = train_test_split(
+        texts, y, test_size=TEST_SPLIT, random_state=RANDOM_SEED, stratify=y)
+    tfidf = TfidfVectorizer(max_features=20000, ngram_range=(1, 2), min_df=2)
+    Xtr_v = tfidf.fit_transform(Xtr)
+    Xte_v = tfidf.transform(Xte)
+    # class_weight balanced = the SVM analogue of Stage 1's pos_weight
+    clf = LinearSVC(class_weight='balanced', random_state=RANDOM_SEED)
+    clf.fit(Xtr_v, ytr)
+    return _report("SVM + TF-IDF", yte, clf.predict(Xte_v))
 
-    # Simple tokenization (word-level)
+
+def lstm_baseline(texts, y, epochs=5):
+    import torch
+    import torch.nn as nn
+    from torch.utils.data import DataLoader, TensorDataset
     from collections import Counter
-    word_freq = Counter()
-    for text in texts:
-        word_freq.update(text.lower().split())
 
-    vocab = {word: idx + 2 for idx, (word, _) in enumerate(word_freq.most_common(10000))}
-    vocab['<PAD>'] = 0
-    vocab['<UNK>'] = 1
-
-    max_len = 128
-
-    def encode_text(text):
-        tokens = text.lower().split()[:max_len]
-        encoded = [vocab.get(w, 1) for w in tokens]
-        # Pad
-        encoded += [0] * (max_len - len(encoded))
-        return encoded
-
-    X_encoded = np.array([encode_text(t) for t in texts])
-
-    # Split
-    X_train, X_test, y_train, y_test = train_test_split(
-        X_encoded, labels, test_size=TEST_SPLIT, random_state=RANDOM_SEED
-    )
-
-    # Convert to tensors
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    X_train_t = torch.tensor(X_train, dtype=torch.long)
-    y_train_t = torch.tensor(y_train, dtype=torch.float)
-    X_test_t = torch.tensor(X_test, dtype=torch.long)
-    y_test_t = torch.tensor(y_test, dtype=torch.float)
+    print(f"[LSTM] device: {device}")
 
-    train_dataset = TensorDataset(X_train_t, y_train_t)
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+    wf = Counter()
+    for t in texts:
+        wf.update(t.lower().split())
+    vocab = {w: i + 2 for i, (w, _) in enumerate(wf.most_common(20000))}
+    vocab['<PAD>'] = 0; vocab['<UNK>'] = 1
+    max_len = 64
 
-    # LSTM Model
-    class SimpleLSTM(nn.Module):
-        def __init__(self, vocab_size, embed_dim=128, hidden_dim=128, num_classes=3):
+    def enc(t):
+        toks = t.lower().split()[:max_len]
+        ids = [vocab.get(w, 1) for w in toks]
+        return ids + [0] * (max_len - len(ids))
+
+    X = np.array([enc(t) for t in texts])
+    Xtr, Xte, ytr, yte = train_test_split(
+        X, y, test_size=TEST_SPLIT, random_state=RANDOM_SEED, stratify=y)
+
+    loader = DataLoader(TensorDataset(torch.tensor(Xtr), torch.tensor(ytr, dtype=torch.float)),
+                        batch_size=64, shuffle=True)
+
+    class BiLSTM(nn.Module):
+        def __init__(self, vsize, emb=128, hid=128):
             super().__init__()
-            self.embedding = nn.Embedding(vocab_size, embed_dim, padding_idx=0)
-            self.lstm = nn.LSTM(embed_dim, hidden_dim, batch_first=True, bidirectional=True)
-            self.dropout = nn.Dropout(0.3)
-            self.fc = nn.Linear(hidden_dim * 2, num_classes)
+            self.emb = nn.Embedding(vsize, emb, padding_idx=0)
+            self.lstm = nn.LSTM(emb, hid, batch_first=True, bidirectional=True)
+            self.drop = nn.Dropout(0.3)
+            self.fc = nn.Linear(hid * 2, 1)
 
         def forward(self, x):
-            emb = self.embedding(x)
-            lstm_out, (hidden, _) = self.lstm(emb)
-            # Use last hidden state from both directions
-            hidden = torch.cat([hidden[-2], hidden[-1]], dim=1)
-            hidden = self.dropout(hidden)
-            return self.fc(hidden)
+            e = self.emb(x)
+            _, (h, _) = self.lstm(e)
+            h = self.drop(torch.cat([h[-2], h[-1]], dim=1))
+            return self.fc(h).squeeze(-1)
 
-    model = SimpleLSTM(vocab_size=len(vocab) + 2).to(device)
-    criterion = nn.BCEWithLogitsLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    model = BiLSTM(len(vocab) + 2).to(device)
+    pos = int(ytr.sum()); neg = len(ytr) - pos
+    crit = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([neg / max(pos, 1)], device=device))
+    opt = torch.optim.Adam(model.parameters(), lr=1e-3)
 
-    # Train
-    print("Training LSTM...")
-    model.train()
-    for epoch in range(10):
-        total_loss = 0
-        for batch_x, batch_y in train_loader:
-            batch_x, batch_y = batch_x.to(device), batch_y.to(device)
-            optimizer.zero_grad()
-            outputs = model(batch_x)
-            loss = criterion(outputs, batch_y)
-            loss.backward()
-            optimizer.step()
-            total_loss += loss.item()
-        if (epoch + 1) % 5 == 0:
-            print(f"  Epoch {epoch + 1}/10, Loss: {total_loss / len(train_loader):.4f}")
+    for ep in range(epochs):
+        model.train(); tot = 0
+        for bx, by in loader:
+            bx, by = bx.to(device), by.to(device)
+            opt.zero_grad(); loss = crit(model(bx), by); loss.backward(); opt.step()
+            tot += loss.item()
+        print(f"[LSTM] epoch {ep+1}/{epochs} loss {tot/len(loader):.4f}")
 
-    # Evaluate
     model.eval()
     with torch.no_grad():
-        outputs = model(X_test_t.to(device))
-        y_pred = (torch.sigmoid(outputs).cpu().numpy() >= 0.5).astype(int)
-
-    y_test_np = y_test
-
-    print("\n--- Results ---")
-    for i, name in enumerate(LABEL_NAMES):
-        print(f"\n{name}:")
-        print(classification_report(
-            y_test_np[:, i], y_pred[:, i],
-            target_names=['Non-Bullying', 'Bullying'],
-            zero_division=0
-        ))
-
-    accuracy = accuracy_score(y_test_np, y_pred)
-    f1_macro = f1_score(y_test_np, y_pred, average='macro', zero_division=0)
-
-    print(f"\nOverall Accuracy: {accuracy:.4f}")
-    print(f"F1 (Macro):       {f1_macro:.4f}")
-
-    return {'accuracy': accuracy, 'f1_macro': f1_macro}
+        logits = model(torch.tensor(Xte).to(device))
+        pred = (torch.sigmoid(logits).cpu().numpy() >= 0.5).astype(int)
+    return _report("BiLSTM", yte, pred)
 
 
-def run_all_baselines(csv_path=None):
-    """Run all baselines and print comparison table."""
-    csv_path = csv_path or TRAIN_CSV
+def main(run_lstm=False):
+    texts, y = _load()
+    print(f"Messages: {len(y)} | aggressive: {int(y.sum())}")
+    results = [svm_baseline(texts, y)]
+    if run_lstm:
+        results.append(lstm_baseline(texts, y))
 
-    results = {}
-    results['SVM + TF-IDF'] = svm_baseline(csv_path)
-    results['LSTM'] = lstm_baseline(csv_path)
+    print("\n" + "=" * 56)
+    print("STAGE 1 BASELINE COMPARISON (aggression task)")
+    print("=" * 56)
+    print(f"{'Model':<16}{'Acc':>8}{'Prec':>8}{'Rec':>8}{'F1':>8}")
+    for r in results:
+        print(f"{r['name']:<16}{r['acc']:>8.4f}{r['p']:>8.4f}{r['r']:>8.4f}{r['f1']:>8.4f}")
 
-    print("\n" + "=" * 60)
-    print("BASELINE COMPARISON TABLE")
-    print("=" * 60)
-    print(f"{'Model':<20} {'Accuracy':<12} {'F1 (Macro)':<12}")
-    print("-" * 44)
-    for name, metrics in results.items():
-        if metrics:
-            print(f"{name:<20} {metrics['accuracy']:<12.4f} {metrics['f1_macro']:<12.4f}")
-        else:
-            print(f"{name:<20} {'Failed':<12} {'Failed':<12}")
-
-    print("\nNote: These are text-only baselines. The fusion model")
-    print("additionally uses image and context features.")
+    os.makedirs(MODEL_DIR, exist_ok=True)
+    with open(os.path.join(MODEL_DIR, 'eval_baselines.txt'), 'w', encoding='utf-8') as f:
+        f.write("Stage 1 baselines on messages.csv (binary aggression)\n")
+        f.write(f"Seed={RANDOM_SEED}, test_split={TEST_SPLIT}\n\n")
+        for r in results:
+            f.write(f"{r['name']}: acc {r['acc']:.4f} P {r['p']:.4f} R {r['r']:.4f} F1 {r['f1']:.4f}\n")
+    print("\nSaved -> models/eval_baselines.txt")
 
 
 if __name__ == '__main__':
-    run_all_baselines()
+    main(run_lstm='--lstm' in sys.argv)

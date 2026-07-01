@@ -98,7 +98,9 @@ class IntentScorer:
         'harm_threat': {
             'weight': 0.8,
             'keywords': ['hurt', 'beat', 'punch', 'slap', 'marunga', 'peetunga',
-                         'tujhe dekh lunga', 'tera kaam tamam']
+                         'tujhe dekh lunga', 'tera kaam tamam',
+                         'mun tor', 'muh tor', 'mooh tor', 'haddi tor', 'haddiyan tor',
+                         'thok dunga', 'pel dunga', 'thappar', 'maar dunga', 'toor dunga']
         },
         'intimidation': {
             'weight': 0.6,
