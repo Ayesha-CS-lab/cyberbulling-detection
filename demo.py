@@ -32,6 +32,7 @@ AGG_PATHS = {'m-BERT': (MBERT, os.path.join(MODELS, 'aggression_mbert.pth')),
              'MuRIL':  (MURIL, os.path.join(MODELS, 'aggression_muril.pth'))}
 CB_PATH = os.path.join(MODELS, 'cb_classifier.pth')
 IMG_FUSION_PATH = os.path.join(MODELS, 'image_fusion_mbert.pth')
+CLIP_HEAD_PATH = os.path.join(MODELS, 'clip_fusion_head.pth')  # strong CLIP image module
 MAX_LEN = 128
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 PRE = TextPreprocessor()
@@ -63,6 +64,21 @@ def load_image_model():
         transforms.Resize((224, 224)), transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])])
     return itok, model, tf
+
+
+@st.cache_resource(show_spinner='Loading CLIP meme model…')
+def load_clip_model():
+    """Strong image module: frozen CLIP backbone + trained fusion head (thesis §3.12)."""
+    if not os.path.exists(CLIP_HEAD_PATH):
+        return None
+    from transformers import CLIPModel, CLIPProcessor
+    from src.models.clip_model import HeadOnly
+    ckpt = torch.load(CLIP_HEAD_PATH, map_location=DEVICE, weights_only=False)
+    clip = CLIPModel.from_pretrained(ckpt['clip_name']).to(DEVICE).eval()
+    proc = CLIPProcessor.from_pretrained(ckpt['clip_name'])
+    head = HeadOnly(ckpt['in_dim']).to(DEVICE)
+    head.load_state_dict(ckpt['state_dict']); head.eval()
+    return clip, proc, head
 
 
 @st.cache_resource(show_spinner='Loading cyberbullying model…')
@@ -194,37 +210,76 @@ with tab2:
                 st.error('⚠️ CYBERBULLYING detected in this relationship')
             else:
                 st.success('✅ No cyberbullying pattern detected')
+            if total < 3 and aggressive >= 1:
+                st.info(
+                    f'ℹ️ Only **{total} message(s)** entered. Cyberbullying is defined by '
+                    '**repeated** aggression over time — a single aggressive message is '
+                    'correctly *not* flagged as bullying. Add several aggressive messages '
+                    '(one per line) to simulate a repeated pattern and watch the probability rise.'
+                )
 
 # ── Tab 3: meme (image + text) ──────────────────────────────────────────────
 with tab3:
     st.subheader('Analyse a meme (image + text)')
-    im = load_image_model()
-    if im is None:
-        st.warning('Image model not found. Place `models/image_fusion_mbert.pth` to enable this tab.')
-    else:
-        itok, imodel, itf = im
-        up = st.file_uploader('Meme image', type=['jpg', 'jpeg', 'png'])
-        mtext = st.text_input('Meme text (OCR / caption)', '')
+    clip_m = load_clip_model()
+
+    if clip_m is not None:
+        # ── Strong CLIP fusion model ─────────────────────────────────────────
+        clip, proc, head = clip_m
+        up = st.file_uploader('Meme image', type=['jpg', 'jpeg', 'png'], key='clip_up')
+        mtext = st.text_input('Meme text (OCR / caption)', '', key='clip_txt')
         if st.button('Analyse meme', type='primary') and up is not None:
             from PIL import Image
             img = Image.open(up).convert('RGB')
             st.image(img, width=280)
-            enc = itok(PRE.preprocess(mtext, lang='en'), add_special_tokens=True,
-                       max_length=MAX_LEN, padding='max_length', truncation=True,
-                       return_token_type_ids=True, return_tensors='pt')
-            it = itf(img).unsqueeze(0).to(DEVICE)
-            ctx = torch.zeros(1, 2).to(DEVICE)
+            inputs = proc(text=[mtext or ' '], images=[img], return_tensors='pt',
+                          padding=True, truncation=True, max_length=77)
             with torch.no_grad():
-                lo = imodel(enc['input_ids'].to(DEVICE), enc['attention_mask'].to(DEVICE),
-                            enc['token_type_ids'].to(DEVICE), it, ctx).squeeze(-1)
-                p = float(torch.sigmoid(lo).item())
-            st.metric('Offensive probability', f'{p*100:.1f}%')
+                vout = clip.vision_model(pixel_values=inputs['pixel_values'].to(DEVICE))
+                tout = clip.text_model(input_ids=inputs['input_ids'].to(DEVICE),
+                                       attention_mask=inputs['attention_mask'].to(DEVICE))
+                _vp = getattr(vout, 'pooler_output', None)
+                _tp = getattr(tout, 'pooler_output', None)
+                imf = clip.visual_projection(_vp if _vp is not None else vout.last_hidden_state[:, 0])
+                txf = clip.text_projection(_tp if _tp is not None else tout.last_hidden_state[:, 0])
+                imf = imf / imf.norm(dim=-1, keepdim=True).clamp_min(1e-8)
+                txf = txf / txf.norm(dim=-1, keepdim=True).clamp_min(1e-8)
+                feat = torch.cat([imf, txf], dim=-1)
+                p = float(torch.sigmoid(head(feat)).item())
+            st.metric('Harmful-meme probability', f'{p*100:.1f}%')
             if p >= 0.5:
-                st.error('⚠️ Offensive meme')
+                st.error('⚠️ Harmful / hateful meme')
             else:
-                st.success('✅ Not offensive')
-            st.caption('Note: the multimodal meme model is a weak baseline (thesis §4.x) — '
-                       'shown to demonstrate the image+text pipeline, not for reliable use.')
+                st.success('✅ Not harmful')
+            st.caption('CLIP (frozen) image + text fusion — thesis §3.12 / §4.7.')
+
+    else:
+        # ── Fallback: earlier ResNet50+m-BERT baseline (if present) ──────────
+        im = load_image_model()
+        if im is None:
+            st.warning('No meme model found. Train the CLIP model (see '
+                       '`docs/CLIP_IMAGE_RUN.md`) and place `models/clip_fusion_head.pth` here.')
+        else:
+            itok, imodel, itf = im
+            up = st.file_uploader('Meme image', type=['jpg', 'jpeg', 'png'], key='rn_up')
+            mtext = st.text_input('Meme text (OCR / caption)', '', key='rn_txt')
+            if st.button('Analyse meme', type='primary') and up is not None:
+                from PIL import Image
+                img = Image.open(up).convert('RGB')
+                st.image(img, width=280)
+                enc = itok(PRE.preprocess(mtext, lang='en'), add_special_tokens=True,
+                           max_length=MAX_LEN, padding='max_length', truncation=True,
+                           return_token_type_ids=True, return_tensors='pt')
+                it = itf(img).unsqueeze(0).to(DEVICE)
+                ctx = torch.zeros(1, 2).to(DEVICE)
+                with torch.no_grad():
+                    lo = imodel(enc['input_ids'].to(DEVICE), enc['attention_mask'].to(DEVICE),
+                                enc['token_type_ids'].to(DEVICE), it, ctx).squeeze(-1)
+                    p = float(torch.sigmoid(lo).item())
+                st.metric('Offensive probability', f'{p*100:.1f}%')
+                st.warning('⚠️ Offensive meme' if p >= 0.5 else '✅ Not offensive')
+                st.caption('Earlier ResNet50+m-BERT baseline (weak — thesis §4.7). '
+                           'Train the CLIP model for the strong version.')
 
 st.divider()
 st.caption('FYP — Context-Aware Multilingual Cyberbullying Detection · m-BERT / MuRIL + dense fusion')
