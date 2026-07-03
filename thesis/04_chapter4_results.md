@@ -4,28 +4,23 @@
 
 ## 4.1 Introduction
 
-This chapter presents the experimental results of the proposed two-stage
-cyberbullying detection framework. It begins with the statistics of the prepared
-dataset and the reliability of its annotations, then reports the performance of
-**Stage 1** (message-level aggression detection) and **Stage 2** (relationship-level
-cyberbullying classification), comparing the multilingual transformers against
-classical and deep-learning baselines. A separate section documents and analyses the
-**majority-class-collapse** failure of an earlier model, providing an instructive
-contrast with the corrected design. The chapter closes with a discussion of the
-findings in relation to the research questions and the existing literature. All
-reported numbers are reproducible with a fixed random seed (42) and are backed by the
-saved evaluation reports in the project's `models/` directory.
+This chapter reports what the two-stage system actually did. It starts with the dataset
+statistics and how reliable the labels are, then gives the numbers for **Stage 1**
+(message-level aggression) and **Stage 2** (relationship-level cyberbullying), each set against
+classical and deep-learning baselines. A separate section digs into the **majority-class
+collapse** of an earlier model, because the contrast is instructive. The chapter ends by
+discussing the findings against the research questions and the wider literature. Every number
+here is reproducible with a fixed seed (42) and is backed by the saved reports in the project's
+`models/` folder.
 
 ## 4.2 Dataset Statistics and Class Distribution
 
-The dataset was organised into the two views described in Chapter 3. **Table 4.1**
-summarises their size and class balance, and **Figure 4.1** visualises the
-distributions. Two characteristics stand out and shape the rest of the analysis.
-First, the message-level data is **multilingual but English-dominant** (90,356
-English and 1,952 Roman Urdu messages). Second, both views are **imbalanced** — only
-34.0% of messages are aggressive, and only 10.4% of user-pairs are cyberbullying —
-which makes accuracy alone an unreliable metric and motivates the class-weighting and
-recall-focused evaluation used throughout.
+The data was split into the two views from Chapter 3. **Table 4.1** gives their size and class
+balance, and **Figure 4.1** shows the distributions. Two things stand out and colour everything
+that follows. The message-level data is **multilingual but heavily English** (90,356 English to
+1,952 Roman Urdu). And both views are **imbalanced** — only 34.0% of messages are aggressive, and
+only 10.4% of user-pairs are cyberbullying. That is why accuracy alone would mislead, and why
+class weighting and a focus on recall run through the whole evaluation.
 
 **Table 4.1.** Dataset statistics and class distribution.
 
@@ -36,24 +31,20 @@ recall-focused evaluation used throughout.
 
 ![Figure 4.1](../docs/figures/class_distribution.png)
 
-> **Figure 4.1.** Class distribution of the message-level data (aggressive vs
-> non-aggressive) and the pair-level data (cyberbullying vs not). Both views are
-> imbalanced toward the negative class.
+> **Figure 4.1.** Class distribution of the messages (aggressive vs non-aggressive) and the pairs
+> (cyberbullying vs not). Both lean toward the negative class.
 
 ## 4.3 Inter-Annotator Agreement Results
 
-The reliability of the Roman Urdu annotations was assessed with **Fleiss' Kappa**
-over 1,999 items labelled by three annotators on a three-level scale. As shown in
-**Table 4.2** and **Figure 4.2**, the three-category agreement is **κ = 0.666**,
-which falls in the **"substantial agreement"** band on the standard interpretation
-scale; binarising the scale in either direction yields κ values of 0.60–0.72, also
-substantial. Of the 1,999 items, 1,337 were labelled unanimously by all three
-annotators and 662 by a two-thirds majority, with none fully split. This confirms
-that the labels driving the model are consistent and trustworthy rather than
-arbitrary.
+The Roman Urdu labels were checked with **Fleiss' Kappa** over 1,999 items rated by three
+annotators on a three-level scale. As **Table 4.2** and **Figure 4.2** show, the three-category
+agreement is **κ = 0.666**, which sits in the **"substantial agreement"** band; collapsing the
+scale to two categories either way gives κ between 0.60 and 0.72, still substantial. Of the 1,999
+items, all three annotators agreed on 1,337, two of three agreed on 662, and none were a
+three-way split. So the labels behind the model are consistent, not arbitrary.
 
-**Table 4.2.** Inter-annotator agreement (Fleiss' Kappa), Roman Urdu data, 3
-annotators, 1,999 items.
+**Table 4.2.** Inter-annotator agreement (Fleiss' Kappa), Roman Urdu data, 3 annotators, 1,999
+items.
 
 | Scheme | Fleiss' κ | Interpretation |
 |---|---:|---|
@@ -63,19 +54,17 @@ annotators, 1,999 items.
 
 ![Figure 4.2](../docs/figures/fleiss_agreement.png)
 
-> **Figure 4.2.** Inter-annotator agreement: distribution of unanimous versus
-> majority annotations and the Fleiss' Kappa value across labelling schemes.
+> **Figure 4.2.** Inter-annotator agreement: unanimous versus majority labels, and the Fleiss'
+> Kappa value across labelling schemes.
 
 ## 4.4 Stage 1 — Aggression Detection Results
 
-Stage 1 was evaluated on a held-out test set of 13,848 messages. **Table 4.3**
-reports the results for the two multilingual transformers (m-BERT and MuRIL) against
-a classical **SVM + TF-IDF** baseline and a **BiLSTM** baseline; **Figure 4.3**
-presents the same comparison graphically. (The reported models were trained on the
-dataset prior to a minor correction of the Roman Urdu labels — affecting under 1% of
-all messages — described in Section 3.4.1; re-training on the corrected labels is
-expected to leave these results essentially unchanged, as the English data, which
-constitutes 97.9% of the corpus, is unaffected.)
+Stage 1 was tested on a held-out set of 13,848 messages. **Table 4.3** gives the two multilingual
+transformers (m-BERT and MuRIL) alongside a classical **SVM + TF-IDF** and a **BiLSTM** baseline,
+and **Figure 4.3** shows the same comparison. (These models were trained before a small correction
+to the Roman Urdu labels — under 1% of all messages, described in Section 3.4.1. Re-training on the
+corrected labels should barely move the numbers, since the English data, 97.9% of the corpus, is
+untouched.)
 
 **Table 4.3.** Stage 1 message-level aggression results (held-out test, n = 13,848).
 
@@ -88,44 +77,37 @@ constitutes 97.9% of the corpus, is unaffected.)
 
 ![Figure 4.3](../docs/figures/stage1_comparison.png)
 
-> **Figure 4.3.** Stage 1 model comparison across accuracy, precision, recall and
-> F1-score for the SVM, BiLSTM, m-BERT and MuRIL models.
+> **Figure 4.3.** Stage 1 comparison across accuracy, precision, recall and F1 for SVM, BiLSTM,
+> m-BERT and MuRIL.
 
-The results show a clean, monotonic progression — **SVM < BiLSTM < m-BERT < MuRIL** —
-that exactly matches the narrative of Chapter 2: classical machine learning is
-improved upon by older deep learning, which is in turn surpassed by transformer
-models. Both transformers beat the classical baseline by a clear margin.
+The ordering is clean: **SVM < BiLSTM < m-BERT < MuRIL**. That is exactly the story Chapter 2 told
+— classical machine learning improved on by older deep learning, then overtaken by transformers —
+and both transformers clear the classical baseline comfortably.
 
-**MuRIL is the best model overall**, with the highest accuracy (0.882), the highest
-F1-score (0.840) and, most importantly for a safety task, the highest **recall**
-(0.889 versus m-BERT's 0.849). The confusion matrices in **Figure 4.4** and **Figure
-4.5** make this concrete: MuRIL reduces the number of *missed* aggressive messages
-(false negatives) from 727 to 536. This advantage is consistent with MuRIL's
-pretraining on South Asian and transliterated text, which is well matched to Roman
-Urdu. In a cyberbullying setting, where the cost of missing genuine aggression is
-high, MuRIL's recall-favouring behaviour is the preferable trade-off. This answers
-**RQ1**: a multilingual transformer reliably detects aggression across English and
-Roman Urdu, and MuRIL outperforms m-BERT.
+**MuRIL comes out on top.** It has the best accuracy (0.882), the best F1 (0.840), and — the one
+that matters most for a safety task — the best **recall** (0.889 against m-BERT's 0.849). The
+confusion matrices in **Figure 4.4** and **Figure 4.5** make it concrete: MuRIL cuts the number of
+*missed* aggressive messages from 727 down to 536. That fits MuRIL's pretraining on South Asian and
+transliterated text, which lines up with Roman Urdu. When missing real aggression is the expensive
+mistake, MuRIL's lean toward recall is the trade-off you want. This answers **RQ1**: a multilingual
+transformer detects aggression reliably across English and Roman Urdu, and MuRIL edges out m-BERT.
 
 ![Figure 4.4](../docs/figures/cm_stage1_mbert.png)
 
-> **Figure 4.4.** Confusion matrix — m-BERT aggression classifier (TN = 8094, FP =
-> 926, FN = 727, TP = 4101).
+> **Figure 4.4.** Confusion matrix — m-BERT (TN = 8094, FP = 926, FN = 727, TP = 4101).
 
 ![Figure 4.5](../docs/figures/cm_stage1_muril.png)
 
-> **Figure 4.5.** Confusion matrix — MuRIL aggression classifier (TN = 7915, FP =
-> 1105, FN = 536, TP = 4292). MuRIL misses fewer aggressive messages than m-BERT.
+> **Figure 4.5.** Confusion matrix — MuRIL (TN = 7915, FP = 1105, FN = 536, TP = 4292). It misses
+> fewer aggressive messages than m-BERT.
 
 ## 4.5 Stage 2 — Cyberbullying Classification Results
 
-Stage 2 takes each user-pair's aggregated behavioural features — aggression
-proportion, repetition, intent, peerness and user context — and predicts the final
-cyberbullying label. To ensure the result is not an artefact of a single fortunate
-split, it was evaluated both with **5-fold stratified cross-validation** (the
-headline figure) and on a held-out test set. **Table 4.4** reports both, and
-**Figure 4.6** and **Figure 4.7** show the test confusion matrix and the per-fold
-cross-validation scores.
+Stage 2 takes each pair's aggregated features — aggression proportion, repetition, intent, peerness
+and user context — and predicts the final label. To make sure the result was not a lucky split, it
+was evaluated both with **5-fold stratified cross-validation** (the headline) and on a held-out
+test set. **Table 4.4** gives both, and **Figures 4.6 and 4.7** show the test confusion matrix and
+the per-fold scores.
 
 **Table 4.4.** Stage 2 user-pair cyberbullying results.
 
@@ -136,49 +118,41 @@ cross-validation scores.
 
 ![Figure 4.6](../docs/figures/cm_stage2.png)
 
-> **Figure 4.6.** Confusion matrix — Stage 2 cyberbullying classifier on the held-out
-> test set (TN = 1556, FP = 149, FN = 2, TP = 196).
+> **Figure 4.6.** Confusion matrix — Stage 2 on the held-out test set (TN = 1556, FP = 149, FN = 2,
+> TP = 196).
 
 ![Figure 4.7](../docs/figures/stage2_cv.png)
 
-> **Figure 4.7.** Stage 2 performance across the five cross-validation folds. The very
-> small variance (± 0.4% accuracy) shows the result is stable rather than a lucky
-> split.
+> **Figure 4.7.** Stage 2 across the five cross-validation folds. The tiny variance (± 0.4%
+> accuracy) shows the result is stable, not a fluke.
 
-The model achieves **92.1% accuracy** with an exceptionally high **recall of 0.972
-(cross-validation) and 0.990 (test)**: on the test set it correctly identifies **196
-of 198** true cyberbullying pairs, missing only two. The very low cross-validation
-standard deviation (± 0.4% accuracy) confirms that this performance is **stable**, not
-the product of a favourable split. Precision is deliberately lower (≈ 0.57) because,
-on a 10.4%-positive, safety-critical task, the model is tuned through positive-class
-weighting to **favour recall** — it is far more costly to miss a genuine victim than
-to raise a false alarm that can be reviewed. This directly addresses **RQ2** and
-**RQ3**: separating message-level aggression from relationship-level cyberbullying,
-and combining the aggression signal with repetition, intent and peerness, recovers the
-behavioural definition of cyberbullying that a single-stage aggression classifier
-cannot.
+The model reaches **92.1% accuracy** with a very high **recall — 0.972 in cross-validation, 0.990
+on the test set**. On the test set it catches **196 of 198** real cyberbullying pairs and misses
+only two. The tiny cross-validation spread (± 0.4% accuracy) says this is **stable**, not the
+product of a kind split. Precision is lower on purpose (≈ 0.57): on a task that is only 10.4%
+positive and safety-critical, the positive-class weighting tilts the model toward **recall**,
+because missing a real victim costs far more than a false alarm that a human can review. This
+answers **RQ2** and **RQ3** — splitting message-level aggression from relationship-level
+cyberbullying, and adding repetition, intent and peerness, brings back the behavioural definition
+that a single-stage classifier cannot reach.
 
 ## 4.6 The "Before" Story: Diagnosing Majority-Class Collapse
 
-A central methodological lesson of this project is the contrast between a model that
-*appears* to work and one that genuinely does. An earlier, single-stage, multi-label
-model suffered a **majority-class collapse**: it learned to predict the dominant class
-for every input. Its aggression confusion matrix was `[[0, 84], [0, 216]]` — it
-labelled **every** message as positive — yielding a superficially respectable **72%
-"accuracy"** (simply the base rate of the majority class) while detecting nothing of
-value. The repetition and intent outputs were worse still: with no positive examples
-available at the message level, those labels were unlearnable.
+The clearest lesson of this project is the gap between a model that *looks* like it works and one
+that does. An earlier, single-stage, multi-label model **collapsed to the majority class** — it
+learned to predict the same class for everything. Its aggression confusion matrix was
+`[[0, 84], [0, 216]]`: it called **every** message positive, which gave a respectable-looking **72%
+"accuracy"** (just the base rate) while finding nothing useful. The repetition and intent outputs
+were worse — with no positive examples at the message level, they could not be learned at all.
 
-Two root causes were identified: (i) **class imbalance with no correction**, which let
-the model minimise loss by ignoring the minority class; and (ii) attempting to predict
-**repetition and intent at the single-message level**, where they are not defined.
-The fixes were precisely the design decisions described in Chapter 3: **class
-weighting**, evaluation by **recall and F1 rather than accuracy**, and the **two-stage,
-relationship-level architecture** that moves repetition and intent to the level at
-which they actually exist. **Table 4.5** and **Figure 4.8** contrast the two models.
+Two things caused it: **class imbalance with no correction**, which let the model cut its loss by
+ignoring the minority class; and trying to predict **repetition and intent on single messages**,
+where they do not even exist. The fixes are the design choices from Chapter 3 — **class weighting**,
+judging by **recall and F1 instead of accuracy**, and the **two-stage design** that moves repetition
+and intent to the relationship level where they belong. **Table 4.5** and **Figure 4.8** put the two
+models side by side.
 
-**Table 4.5.** The earlier collapsed model versus the corrected two-stage model
-(aggression task).
+**Table 4.5.** The earlier collapsed model versus the corrected two-stage model (aggression task).
 
 | Model | Accuracy | Recall (bullying) | Genuine detection? |
 |---|---:|---:|---|
@@ -187,73 +161,76 @@ which they actually exist. **Table 4.5** and **Figure 4.8** contrast the two mod
 
 ![Figure 4.8](../docs/figures/cm_before_after.png)
 
-> **Figure 4.8.** Confusion matrices of the earlier collapsed model (left) versus the
-> corrected model (right). The collapsed model predicts a single class for every
-> input; the corrected model discriminates genuinely between classes.
+> **Figure 4.8.** Confusion matrices: the earlier collapsed model (left) versus the corrected model
+> (right). The first predicts one class for everything; the second actually tells the classes apart.
 
-This experience answers **RQ4** and carries a wider message: on imbalanced,
-safety-critical detection tasks, headline accuracy can be actively misleading, and
-correct metric selection and problem framing are as important as the choice of model.
+This answers **RQ4**, and the wider point is worth stating plainly: on imbalanced, safety-critical
+tasks, headline accuracy can be actively misleading, and picking the right metric and framing
+matters as much as picking the right model.
 
 ## 4.7 Multimodal Image-and-Text Component (Stage 3)
 
-The multimodal component (Section 3.12) was trained and evaluated on the **Memotion**
-meme dataset of 6,992 memes (4,279 offensive / 2,713 non-offensive), where each sample
-comprises a meme image and its overlaid text. Unlike the conversational dataset, this
-benchmark is **positive-heavy** (about 61% offensive), and offensive memes are a
-recognised hard case in the literature, where state-of-the-art systems achieve only a
-macro-F1 of around 0.50.
+Two multimodal approaches were tried: a first attempt on the Memotion dataset, and a stronger
+CLIP-based approach on Hateful Memes, which is the reported result.
 
-> *(Optional: insert 2–3 real sample memes here — image plus its OCR text and label —
-> taken from `data/processed/memes.csv`, as a figure or short table.)*
+**Initial attempt (Memotion + ResNet50/m-BERT).** The first version was trained on the Memotion
+dataset of 6,992 memes (4,279 offensive / 2,713 non-offensive), each a meme image plus its overlaid
+text (Figure 4.9). The set is positive-heavy (about 61% offensive), and offensive memes are known
+to be hard — strong systems in the literature only reach a macro-F1 around 0.50. A fusion of a fully
+fine-tuned ResNet50 and m-BERT managed only 0.54 accuracy and a macro-F1 of 0.51 — essentially the
+majority-class baseline — and it overfit badly (training accuracy climbed to 0.96 while validation
+stalled near 0.54), at times collapsing to the majority class, the same failure seen in Section 4.6.
+Two reasons stood out: the *offensive* label is a weak stand-in for bullying, and fully fine-tuning
+two large backbones on a few thousand memes overfits.
 
-The multimodal classifier (ResNet50 + m-BERT fusion) reached a test accuracy of **0.54**,
-with precision 0.62, recall 0.65 and an F1 of 0.64 on the offensive class, but a
-**macro-F1 of only 0.51** — essentially at the level of the majority-class baseline. The
-model also showed a strong tendency to **overfit** (training accuracy rose to 0.96 while
-validation accuracy stagnated near 0.54) and, under alternative training settings,
-collapsed toward predicting the majority class — *the same failure mode documented for the
-text model in Section 4.6*. These results indicate that, on this benchmark and with this
-data, the **image modality did not yield a reliable cyberbullying signal**: the offensive
-label is a weak proxy for bullying, the bullying cue in a meme lies largely in its text
-rather than its image, and the dataset is too small to fine-tune two large pretrained
-backbones without overfitting.
+*(Figure 4.9 — sample memes from Memotion — stays here.)*
 
-This component is therefore reported as a **preliminary, exploratory result rather than a
-validated contribution**. It establishes a working multimodal pipeline and an honest
-baseline, while the directions needed to make image-based detection reliable — a larger,
-purpose-built bullying image dataset, frozen-backbone or lightweight fusion, balanced
-sampling and macro-averaged model selection — are set out as future work (Section 5.4).
-The **two-stage text system remains the validated core contribution** of this thesis.
+**Improved approach (CLIP + Hateful Memes).** Those lessons led to the stronger design in Section
+3.12: a **frozen** CLIP encoder with a small trained head, evaluated on Hateful Memes, which is
+built so that neither the image nor the text alone is enough. **Table 4.7** gives the three variants
+on the held-out dev set (250 memes, balanced).
+
+**Table 4.7.** CLIP-based image + text results (Hateful Memes dev set).
+
+| Model | AUC | Macro-F1 | Accuracy |
+|---|---:|---:|---:|
+| CLIP text-only | 0.606 | 0.545 | 0.552 |
+| CLIP image-only | 0.641 | 0.592 | 0.592 |
+| **CLIP fusion (image + text)** | **0.651** | **0.599** | **0.600** |
+
+The fusion model wins on every metric (AUC 0.651), ahead of both text-only (0.606) and image-only
+(0.641), and its confusion matrix (TN 82, FP 43, FN 57, TP 68) shows it separates both classes
+rather than collapsing. That is the key finding: with a frozen CLIP encoder, combining image and
+text genuinely beats either one alone. The absolute score is moderate — Hateful Memes is a hard
+benchmark (strong systems reach roughly 0.75–0.80 AUC), and only a partial image set was available,
+with a frozen backbone and a light head — but it is a working, honestly-measured multimodal pipeline
+in which fusion beats both unimodal baselines, and a clear step up from the Memotion attempt. Ways
+to push it further are in Section 5.4. The two-stage text system remains the validated core of this
+thesis.
 
 ## 4.8 Discussion
 
-Taken together, the results support the central thesis of this work: **cyberbullying is
-best modelled as a behaviour over a relationship, not as a property of a single
-message**. Stage 1 establishes that aggression can be detected reliably and
-multilingually, with MuRIL the strongest model; Stage 2 demonstrates that layering
-repetition, intent and peerness on top of that aggression signal yields a stable,
-high-recall cyberbullying decision. The two stages are complementary: Stage 1 supplies
-the linguistic signal, and Stage 2 supplies the behavioural context that turns
-aggression into a cyberbullying judgement.
+Put together, the results back the central claim: **cyberbullying is best modelled as behaviour over
+a relationship, not as a property of one message**. Stage 1 shows aggression can be caught reliably
+and across languages, with MuRIL leading; Stage 2 shows that adding repetition, intent and peerness
+on top of that signal gives a stable, high-recall decision. The two stages complement each other —
+Stage 1 supplies the language signal, Stage 2 supplies the behavioural context that turns aggression
+into a bullying judgement. The multimodal component extends the idea to memes, where image-and-text
+fusion outperforms either modality on its own.
 
-The deliberate emphasis on **recall** throughout is a considered design choice rather
-than an accident of tuning. In a protective system, a missed case of sustained
-harassment is a far more serious outcome than a false alarm, and both stages are
-configured accordingly. The lower precision at Stage 2 is the acknowledged cost of this
-choice, and is appropriate when flagged cases are intended for human review rather than
-automatic punishment.
+The steady emphasis on **recall** is deliberate, not an accident of tuning. In a protective tool,
+missing a sustained campaign of harassment is far worse than a false alarm, and both stages are set
+up with that in mind. The lower precision at Stage 2 is the price of that choice, and it is
+reasonable when flagged cases go to a human for review rather than to automatic punishment.
 
 ## 4.9 Comparison with Existing Literature
 
-**Table 4.6** positions the proposed system against representative prior work. The key
-distinction is not raw accuracy — which is not directly comparable across different
-datasets — but **scope**. Most prior systems, including the recent Roman Urdu and
-multilingual studies, detect **aggression only** and equate it with cyberbullying. The
-proposed framework is, to the author's knowledge, distinctive in combining
-**multilingual aggression detection** with explicit, quantitative modelling of
-**repetition, intent and peerness**, thereby operationalising the full behavioural
-definition of cyberbullying rather than a single facet of it.
+**Table 4.6** places the system next to representative earlier work. The real difference is not raw
+accuracy — which does not compare cleanly across different datasets — but **scope**. Most prior
+systems, including the recent Roman Urdu and multilingual ones, detect **aggression only** and treat
+it as cyberbullying. This framework, as far as the author is aware, is unusual in pairing
+**multilingual aggression detection** with explicit, quantitative **repetition, intent and
+peerness**, so it captures the full behavioural definition rather than one slice of it.
 
 **Table 4.6.** Comparison of the proposed system with representative existing work.
 
@@ -264,9 +241,8 @@ definition of cyberbullying rather than a single facet of it.
 | Razi & Ejaz (2024) | Urdu, Roman Urdu, English | ✓ | ✗ | ✗ | ✗ | Multilingual model |
 | **This work** | English, Roman Urdu (Urdu) | ✓ | ✓ | ✓ | ✓ | Two-stage transformer + behavioural |
 
-In summary, the experimental evidence confirms all four research questions: a
-multilingual transformer detects aggression effectively (RQ1); a two-stage design
-recovers repetition and intent that single-stage models miss (RQ2); repetition, intent
-and peerness can be quantified and meaningfully combined (RQ3); and correcting the
-majority-class collapse demonstrates the decisive importance of imbalance-aware
-evaluation (RQ4).
+In short, the evidence backs all four research questions: a multilingual transformer detects
+aggression well (RQ1); the two-stage design recovers the repetition and intent that single-stage
+models drop (RQ2); repetition, intent and peerness can be quantified and combined to good effect
+(RQ3); and fixing the majority-class collapse shows how much imbalance-aware evaluation matters
+(RQ4).

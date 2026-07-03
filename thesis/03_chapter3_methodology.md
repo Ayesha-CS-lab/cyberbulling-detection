@@ -4,87 +4,73 @@
 
 ## 3.1 Overview of the Proposed Methodology
 
-The central design principle of this work is that **cyberbullying is a property of a
-relationship over time, not of a single message**. A model that classifies one message in
-isolation can, at best, recognise *aggression*; it cannot recognise the *repetition* and
-*intent* that distinguish genuine bullying from an isolated offensive remark
-(Sections 1.4 and 2.2). The proposed system therefore separates the problem into **two
-stages**, illustrated in **Figure 3.1**:
+The idea that drives this whole design is simple: **cyberbullying lives in a relationship over
+time, not in a single message**. Judge one message on its own and the best you can do is spot
+*aggression* — you cannot see the *repetition* and *intent* that separate real bullying from a
+one-off insult (Sections 1.4 and 2.2). So the system is split into **two stages** (Figure 3.1):
 
 - **Stage 1 — Message-level aggression.** A multilingual transformer (m-BERT or MuRIL) is
-  fine-tuned to decide whether a *single* message — in English or Roman Urdu — is
-  aggressive. This is the linguistic building block of the pipeline.
-- **Stage 2 — Relationship-level cyberbullying.** For each pair of users, the
-  aggressive-message signal is aggregated over their entire conversation history and
-  combined with quantitative measures of **repetition**, **intent to harm**, **peerness**
-  and **user context** (age, grade, gender). A compact dense neural network then makes the
-  final cyberbullying decision for that relationship.
+  fine-tuned to say whether one message — English or Roman Urdu — is aggressive. This is the
+  language building block.
+- **Stage 2 — Relationship-level cyberbullying.** For each pair of users, the aggressive-message
+  signal is gathered across their whole conversation and combined with measures of
+  **repetition**, **intent to harm**, **peerness** and **user context** (age, grade, gender). A
+  small dense network then makes the final call for that relationship.
 
-This two-stage structure mirrors the behavioural definition adopted in Chapter 2: Stage 1
-supplies the *aggression* pillar at the message level, while Stage 2 reconstructs the
-*repetition*, *intent* and *peerness* pillars at the relationship level. The complete
-methodology consists of five steps — **data collection and preprocessing, data annotation,
-feature extraction, model development (Stages 1 and 2), and evaluation** — each described
-in the sections that follow.
+The split lines up with the behavioural definition from Chapter 2: Stage 1 gives the
+*aggression* pillar at the message level, and Stage 2 rebuilds *repetition*, *intent* and
+*peerness* at the relationship level. The pipeline runs in five steps — data collection and
+preprocessing, annotation, feature extraction, model development (Stages 1 and 2), and
+evaluation — each covered below.
 
-> **Figure 3.1.** Overall architecture of the proposed two-stage cyberbullying detection
-> system. Stage 1 (m-BERT / MuRIL) classifies individual messages as aggressive; Stage 2
-> aggregates these over each user-pair's history and combines them with repetition, intent,
-> peerness and context features to output the final cyberbullying label. *(Figure to be
-> inserted.)*
+> **Figure 3.1.** Overall architecture of the two-stage system. Stage 1 (m-BERT / MuRIL) marks
+> individual messages as aggressive; Stage 2 aggregates these over each pair's history and adds
+> repetition, intent, peerness and context to produce the final cyberbullying label.
 
 ## 3.2 Dataset
 
 ### 3.2.1 The Comprehensive Cyberbullying Dataset
 
-The primary data source is the comprehensive cyberbullying dataset of **Ejaz, Razi and
-Choudhury (2024)** [3], which is distinguished from most public resources by labelling not
-only aggression but also the **repetition, peerness and intent to harm** that define
-cyberbullying. The dataset is organised as a set of related tables describing a community of
-users and the messages exchanged between them:
+The main data comes from the comprehensive cyberbullying dataset of **Ejaz, Razi and Choudhury
+(2024)** [3]. What sets it apart from most public sets is that it labels not just aggression but
+also the **repetition, peerness and intent to harm** that make up cyberbullying. It is stored as
+a set of linked tables describing a community of users and their messages:
 
-- **Users** — demographic records for each user, including age, gender, school and grade.
-- **Peerness values** — a numeric measure of the social relationship between each pair of
-  users, derived from their relative age and grade.
-- **Communication data** — the message log between users, with each message carrying an
-  aggression label and a timestamp (date and time).
-- **CB labels** — the ground-truth cyberbullying label for each user-pair relationship,
-  together with aggregate counts (total messages, aggressive count, intent to harm,
-  peerness).
+- **Users** — age, gender, school and grade for each user.
+- **Peerness values** — a number describing the social relationship between two users, based on
+  their relative age and grade.
+- **Communication data** — the message log between users; every message has an aggression label
+  and a timestamp.
+- **CB labels** — the ground-truth cyberbullying label for each user-pair, plus aggregate counts
+  (total messages, aggressive count, intent to harm, peerness).
 
-Because every message carries a timestamp and is tied to a sender–receiver pair, the
-dataset supports exactly the kind of **temporal, relationship-level** analysis that the
-definition of cyberbullying requires.
+Because each message is time-stamped and tied to a sender and receiver, the data supports exactly
+the **temporal, relationship-level** analysis that the definition of cyberbullying calls for.
 
 ### 3.2.2 Roman Urdu Aggression Data
 
-To make the Stage 1 aggression classifier genuinely **multilingual**, the English
-communication data is augmented with a **Roman Urdu** corpus of annotated aggressive and
-non-aggressive comments. Each Roman Urdu record contributes its text and a binary
-aggression label, allowing the transformer to learn aggression cues in both languages
-within a single shared model. The reliability of the Roman Urdu annotations is assessed
-separately using Fleiss' Kappa (Section 3.4.2).
+To make Stage 1 genuinely **multilingual**, the English communication data is combined with a
+**Roman Urdu** set of annotated aggressive and non-aggressive comments. Each Roman Urdu record
+adds its text and a binary aggression label, so the transformer learns aggression cues in both
+languages inside one shared model. The reliability of the Roman Urdu labels is checked separately
+with Fleiss' Kappa (Section 3.4.2).
 
 ### 3.2.3 Message-Level and Pair-Level Views
 
-From these raw tables, an automated preparation pipeline (`prepare_dataset.py`) constructs
-the two training tables used by the system, as shown in **Figure 3.2**:
+A preparation script (`prepare_dataset.py`) turns these raw tables into the two training tables
+the system uses (Figure 3.2):
 
-- **`messages.csv` (Stage 1 view).** One row per message, with columns *message*, *label*
-  (aggressive / non-aggressive) and *language*. The English communication log and the Roman
-  Urdu corpus are concatenated, empty messages are dropped, and exact duplicates are
-  removed. The resulting table contains **92,308 messages** — **90,356 English** and
-  **1,952 Roman Urdu** — of which **31,389 are labelled aggressive** and **60,919
-  non-aggressive** (**Table 3.1**).
-- **`pairs.csv` (Stage 2 view).** One row per user-pair, with eighteen columns capturing the
-  aggregated behavioural and contextual features of that relationship together with the
-  final cyberbullying label. The table contains **9,511 user-pairs**, of which **992 (about
-  10.4%) are labelled as cyberbullying** and **8,519 are not** — a substantial class
-  imbalance that strongly influences the design and evaluation of Stage 2 (Sections 3.8 and
-  3.9).
+- **`messages.csv` (Stage 1 view).** One row per message — *message*, *label* (aggressive /
+  non-aggressive), *language*. The English log and the Roman Urdu set are joined, blank messages
+  dropped and exact duplicates removed. The result is **92,308 messages** — **90,356 English**
+  and **1,952 Roman Urdu** — of which **31,389 are aggressive** and **60,919 non-aggressive**
+  (Table 3.1).
+- **`pairs.csv` (Stage 2 view).** One row per user-pair, with eighteen columns holding the
+  aggregated behavioural and contextual features plus the final label. There are **9,511
+  user-pairs**, and only **992 (about 10.4%)** are cyberbullying against **8,519** that are not —
+  a heavy imbalance that shapes the design and evaluation of Stage 2 (Sections 3.8 and 3.9).
 
-> **Figure 3.2.** Construction of the message-level and pair-level data views from the raw
-> dataset tables. *(Figure to be inserted.)*
+> **Figure 3.2.** Building the message-level and pair-level views from the raw dataset tables.
 
 **Table 3.1.** Composition of the message-level dataset by language.
 
@@ -96,10 +82,9 @@ the two training tables used by the system, as shown in **Figure 3.2**:
 | *of which aggressive* | *31,389* | *34.0%* |
 | *of which non-aggressive* | *60,919* | *66.0%* |
 
-To make the nature of the data concrete, **Table 3.2** presents representative
-annotated messages from both languages. The Roman Urdu examples illustrate the
-code-switched, transliterated style discussed earlier; English glosses are provided
-in parentheses. (Strong profanity has been masked for presentation.)
+To make the data concrete, **Table 3.2** shows a few real annotated messages from both languages.
+The Roman Urdu rows show the code-switched, transliterated style discussed earlier, with English
+glosses in brackets. (Strong profanity is masked here.)
 
 **Table 3.2.** Sample annotated messages from the dataset.
 
@@ -117,100 +102,87 @@ in parentheses. (Strong profanity has been masked for presentation.)
 
 #### 3.3.1 Text Cleaning and Normalisation
 
-All message text is passed through a cleaning stage (`TextPreprocessor`) before tokenisation.
-The cleaning step removes elements that carry no aggression signal and would otherwise add
-noise:
+Every message goes through a cleaning step (`TextPreprocessor`) before tokenisation. The step
+strips out things that carry no aggression signal and would only add noise:
 
-- **URLs** (`http(s)://…`, `www.…`) are stripped.
+- **URLs** (`http(s)://…`, `www.…`) are removed.
 - **HTML tags** are removed.
-- **User mentions** (`@username`) are removed, since the identity of the mentioned account
-  is irrelevant to whether the message is aggressive.
-- **Emojis and stray special characters** are replaced with spaces.
-- **Whitespace** is normalised so that runs of spaces collapse to a single space.
+- **User mentions** (`@username`) are removed — who is mentioned says nothing about whether the
+  message is aggressive.
+- **Emojis and stray symbols** are replaced with spaces.
+- **Whitespace** is collapsed so runs of spaces become one.
 
 #### 3.3.2 Roman Urdu Handling and Tokenisation
 
-Roman Urdu poses a particular challenge because it has **no standardised spelling**: the
-same word may be written in many different ways. A light normalisation step lower-cases the
-text and reduces some common repeated-vowel spelling variations (for example collapsing
-doubled vowels) so that superficially different spellings of the same word are brought
-closer together. This is deliberately conservative; the heavy lifting of cross-language and
-cross-spelling generalisation is left to the multilingual transformer, whose sub-word
-tokeniser and shared representation space are far better suited to spelling variation than a
-fixed rule set or lexicon would be. Each cleaned message is then tokenised with the model's
-own pretrained tokeniser (WordPiece for m-BERT, the MuRIL tokeniser for MuRIL) and truncated
-or padded to a fixed maximum length.
+Roman Urdu is tricky because it has **no standard spelling** — one word can be written many ways.
+A light normalisation step lower-cases the text and folds a few common repeated-vowel spellings
+(for example collapsing doubled vowels), so near-identical spellings move closer together. This
+is kept deliberately gentle; the real work of generalising across languages and spellings is left
+to the transformer, whose sub-word tokeniser and shared representation handle spelling variation
+far better than any fixed rule set could. Each cleaned message is then tokenised with the model's
+own pretrained tokeniser (WordPiece for m-BERT, the MuRIL tokeniser for MuRIL) and padded or
+truncated to a fixed length.
 
 ## 3.4 Data Annotation and Inter-Annotator Agreement
 
 ### 3.4.1 Annotation Scheme
 
-The dataset is annotated against the four behavioural pillars introduced in Chapter 1:
+The data is labelled against the four pillars from Chapter 1:
 
-- **Aggression** — a binary label on each message indicating whether it is hostile, abusive
-  or offensive.
-- **Repetition** — derived from the conversation history of each user-pair, capturing how
-  many aggressive acts occur and how persistently they recur over time.
-- **Intent to harm** — a measure of the deliberate purpose to threaten, degrade, intimidate
-  or isolate the victim.
-- **Peerness** — the social relationship and power balance between the two users, derived
-  from their relative age and grade.
+- **Aggression** — a binary label on each message: hostile/abusive or not.
+- **Repetition** — taken from each pair's history: how many aggressive acts there are and how
+  persistently they come back over time.
+- **Intent to harm** — how strongly the language aims to threaten, degrade, intimidate or isolate.
+- **Peerness** — the relationship and power balance between the two users, from their relative age
+  and grade.
 
-The final per-relationship **cyberbullying label (CB_Label)** is the ground truth that
-Stage 2 is trained to predict.
+The per-relationship **cyberbullying label (CB_Label)** is the ground truth Stage 2 learns to
+predict.
 
-The Roman Urdu portion of the data was supplied with a **three-level (0/1/2)** annotation
-scale — corresponding to neutral, positive and hostile/negative tone — assigned
-independently by three annotators. For the aggression task, only the **hostile (level 2)**
-class is treated as aggressive; each annotator's rating is mapped to a binary
-"aggressive" vote (`rating == 2`) and a **majority vote** (at least two of three) of these
-determines the final aggression label. This consensus mapping yields 612 aggressive Roman
-Urdu messages and is the basis of the message-level labels used for Stage 1.
+The Roman Urdu part came with a **three-level (0/1/2)** scale — neutral, positive and
+hostile/negative tone — rated independently by three annotators. For the aggression task, only the
+**hostile (level 2)** class counts as aggressive: each annotator's rating becomes a binary
+"aggressive" vote (`rating == 2`), and a **majority vote** (at least two of three) sets the final
+label. This gives 612 aggressive Roman Urdu messages, which feed the Stage 1 labels.
 
 ### 3.4.2 Fleiss' Kappa Agreement
 
-Because labelling abusive language involves subjective judgement, the **reliability** of the
-annotations must be demonstrated rather than assumed. For the Roman Urdu data, each item was
-labelled by **three annotators**, and agreement among them is quantified using **Fleiss'
-Kappa** (`fleiss_kappa.py`), the standard chance-corrected measure of agreement among
-multiple raters on categorical labels. For two categories (bullying / non-bullying) and
-three raters, a ratings matrix is built in which each row records how many of the three
-annotators assigned each category to that item, and Kappa is computed as
+Since labelling abuse involves judgement calls, the **reliability** of the labels has to be shown,
+not assumed. Each Roman Urdu item was rated by **three annotators**, and their agreement is
+measured with **Fleiss' Kappa** (`fleiss_kappa.py`) — the standard chance-corrected agreement
+score for several raters on categorical labels. For two categories and three raters, a ratings
+matrix records how many annotators chose each category per item, and Kappa is
 
   κ = (P̄ − Pₑ) / (1 − Pₑ),
 
-where P̄ is the mean observed agreement across items and Pₑ is the agreement expected by
-chance. The resulting value is interpreted on the conventional scale (slight, fair,
-moderate, substantial, almost-perfect agreement), and the proportion of items with unanimous
-versus majority agreement is reported alongside it (Section 4.3). Reporting Kappa
-establishes that the labels driving the model are consistent and trustworthy.
+where P̄ is the mean observed agreement and Pₑ is the agreement expected by chance. The result is
+read on the usual scale (slight, fair, moderate, substantial, almost-perfect), and the share of
+items with unanimous versus majority agreement is reported with it (Section 4.3). Reporting Kappa
+is what shows the labels behind the model are consistent.
 
 ## 3.5 Feature Extraction
 
 ### 3.5.1 Textual Features (m-BERT / MuRIL Embeddings)
 
-Textual meaning is captured by a **multilingual transformer**. Two models are evaluated:
+Meaning in the text is captured by a **multilingual transformer**, and two are compared:
 
-- **m-BERT (`bert-base-multilingual-cased`)**, pretrained on the Wikipedia text of more than
-  one hundred languages, providing a shared multilingual representation suited to
-  code-switched English/Roman Urdu text.
-- **MuRIL (`google/muril-base-cased`)**, pretrained specifically on South Asian languages and
-  on transliterated text, making it directly relevant to Roman Urdu.
+- **m-BERT (`bert-base-multilingual-cased`)** — pretrained on Wikipedia in over a hundred
+  languages, giving a shared multilingual representation that suits code-switched English/Roman
+  Urdu.
+- **MuRIL (`google/muril-base-cased`)** — pretrained specifically on South Asian languages and on
+  transliterated text, which is directly relevant to Roman Urdu.
 
-Both produce a 768-dimensional contextual embedding for each message. Unlike Bag-of-Words or
-lexicon features, these embeddings encode word order, context and cross-lingual relationships,
-allowing the model to interpret meaning that depends on how words are used rather than merely
-which words are present.
+Each produces a 768-dimensional contextual embedding per message. Unlike bag-of-words or lexicon
+features, these embeddings carry word order, context and cross-lingual links, so the model reads
+meaning that depends on *how* words are used, not just *which* words appear.
 
 ### 3.5.2 Behavioural and Contextual Features
 
 At the relationship level, each user-pair is summarised by a vector of **behavioural and
-contextual features** computed from its conversation history (**Table 3.3**). These include
-the volume of communication, the amount and proportion of aggression, temporal repetition
-features (how many distinct days aggression occurred on, and over how long a span), the
-intent-to-harm score, the peerness score, and the demographic context of both participants.
-Together these convert a relationship's entire history into a single fixed-length feature
-vector that Stage 2 can classify.
+contextual features** built from its history (Table 3.3): how much the two talk, how much of it is
+aggressive, temporal repetition signals (how many distinct days aggression happened on, and over
+how long), the intent-to-harm score, the peerness score, and the demographics of both users.
+Together these turn a whole relationship into one fixed-length vector that Stage 2 can classify.
 
 **Table 3.3.** Pair-level relationship features used by the Stage 2 classifier.
 
@@ -233,96 +205,81 @@ vector that Stage 2 can classify.
 ### 3.6.1 Transformer Fine-Tuning
 
 Stage 1 (`AggressionClassifier`) fine-tunes the chosen transformer for binary aggression
-classification, as shown in **Figure 3.4**. A message is tokenised and passed through the
-m-BERT/MuRIL encoder; the pooled `[CLS]` representation (768 dimensions) is taken as the
-message embedding, passed through a dropout layer for regularisation, and projected by a
-single linear layer to one logit. A sigmoid converts this logit to the probability that the
-message is aggressive. The entire network — encoder plus classification head — is fine-tuned
-end-to-end using the binary cross-entropy objective.
+classification (Figure 3.4). A message is tokenised and run through the m-BERT/MuRIL encoder; the
+pooled `[CLS]` vector (768 dimensions) is taken as the message embedding, passed through a dropout
+layer, and mapped by one linear layer to a single logit. A sigmoid turns that into the probability
+the message is aggressive. The whole network — encoder and head — is fine-tuned end-to-end with
+binary cross-entropy.
 
-> **Figure 3.4.** Stage 1 architecture: a multilingual transformer encoder (m-BERT / MuRIL)
-> followed by dropout and a single linear classification head producing an aggression
-> probability. *(Figure to be inserted.)*
+> **Figure 3.4.** Stage 1 architecture: a multilingual transformer encoder (m-BERT / MuRIL) with
+> dropout and a single linear head producing an aggression probability.
 
 ### 3.6.2 Class Imbalance Handling
 
-Aggressive messages are a minority of the corpus (about 35%; Table 3.1). Left uncorrected,
-this imbalance encourages a model to favour the majority (non-aggressive) class. To counter
-this, **class weighting** is applied in the loss function so that errors on the minority
-(aggressive) class are penalised more heavily, and **precision, recall and F1-score** —
-rather than accuracy alone — are used to monitor training. This design decision is a direct
-response to the majority-class-collapse failure observed in an earlier version of the system
-(Sections 1.6 and 4.6).
+Aggressive messages are the minority (about 35%; Table 3.1). Left alone, that pushes a model to
+favour the non-aggressive class. To stop this, the loss uses **class weighting** so mistakes on the
+aggressive class hurt more, and training is watched with **precision, recall and F1** rather than
+accuracy alone. This choice is a direct answer to the majority-class collapse seen in an earlier
+version (Sections 1.6 and 4.6).
 
 ## 3.7 Quantifying Repetition and Intent
 
-A defining contribution of this work is that repetition and intent are **measured
-quantitatively**, not assumed. Two scoring components (`scoring.py`) operationalise these
-pillars; the temporal repetition features used by Stage 2 are additionally derived directly
-from the timestamped conversation log.
+One of the contributions here is that repetition and intent are **measured**, not assumed. Two
+scoring components (`scoring.py`) do this, and the temporal repetition features used by Stage 2 are
+computed directly from the timestamped log.
 
 ### 3.7.1 Repetition Scoring
 
-Repetition is treated as the **recurrence of aggression between the same pair of users over
-time**. Two complementary signals capture it. First, from the conversation log, the pipeline
-computes how many **distinct days** aggression occurred on (`aggression_active_days`) and the
-**span of days** between the first and last aggressive message (`aggression_span_days`); a
-`repetition_flag` marks relationships with two or more aggressive messages. Of the 9,511
-user-pairs, **5,568 exhibit repeated aggression** under this flag. Second, a `RepetitionScorer`
-provides a content-based measure: it compares a user's messages using **Jaccard similarity**
-over their word sets and counts near-duplicate pairs above a similarity threshold, weighting
-the result by message frequency so that frequent, repeated attacks score highly while a
-single message scores zero (**Figure 3.5**). Together these capture both the *temporal
-persistence* and the *content repetition* that characterise sustained harassment.
+Repetition means **the same aggression coming back between the same two users over time**. Two
+signals capture it. From the log, the pipeline counts how many **distinct days** aggression
+occurred on (`aggression_active_days`) and the **span** between the first and last aggressive
+message (`aggression_span_days`), and a `repetition_flag` marks pairs with two or more aggressive
+messages — **5,568 of the 9,511 pairs** trip that flag. On the content side, a `RepetitionScorer`
+compares a user's messages with **Jaccard similarity** over their word sets, counts near-duplicate
+pairs above a threshold, and weights the result by frequency, so a stream of repeated attacks
+scores high while a single message scores zero (Figure 3.5). Between them, they capture both the
+*persistence over time* and the *repeated content* of sustained harassment.
 
-> **Figure 3.5.** Repetition and intent scoring over a conversation timeline: repeated
-> aggressive messages from the same sender to the same target, persisting across multiple
-> days, raise the repetition signal. *(Figure to be inserted.)*
+> **Figure 3.5.** Repetition and intent over a conversation timeline: repeated aggressive messages
+> from the same sender to the same target, spread across several days, raise the repetition signal.
 
 ### 3.7.2 Intent-to-Harm Scoring
 
-Intent is estimated by an `IntentScorer` that recognises **severity-weighted linguistic
-cues** in both English and Roman Urdu. Keywords are grouped into categories ordered by
-severity — death threats (weight 1.0), threats of physical harm (0.8), intimidation (0.6),
-degradation (0.5) and social isolation (0.4) — and each category includes both English and
-Roman Urdu expressions (for example *"jaan se maar"*, *"tujhe dekh lunga"*, *"khabardar"*,
-*"nikamma"*). In addition, a set of regular-expression **patterns** detects deliberate
-constructions such as *"I will hurt you"*, *"you will pay"* and *"just wait"*. The final
-intent score combines the maximum severity matched, a bonus for the number of distinct cues,
-and a pattern-match bonus, capped at 1.0. This bilingual, severity-aware design recognises
-that intent is conveyed not by the mere presence of a rude word but by threatening,
-degrading or intimidating *purpose*.
+Intent is scored by an `IntentScorer` that reads **severity-weighted cues** in English and Roman
+Urdu. Keywords are grouped by severity — death threats (1.0), physical-harm threats (0.8),
+intimidation (0.6), degradation (0.5) and social isolation (0.4) — and each group carries both
+English and Roman Urdu expressions (for example *"jaan se maar"*, *"tujhe dekh lunga"*,
+*"khabardar"*, *"nikamma"*). On top of the keywords, a set of regular-expression **patterns**
+catches deliberate constructions such as *"I will hurt you"*, *"you will pay"* and *"just wait"*.
+The final score combines the strongest severity matched, a bonus for how many distinct cues appear,
+and a pattern bonus, capped at 1.0. The point of the design is that intent shows up not in the
+presence of a rude word, but in a threatening, degrading or intimidating *purpose*.
 
 ## 3.8 Stage 2 — User-Pair Cyberbullying Classifier
 
-Stage 2 (`train_stage2.py`) makes the final cyberbullying decision for each relationship. The
-pair-level feature vector of Table 3.3 is assembled, with the two users' genders one-hot
-encoded, and standardised using statistics computed on the **training split only** (to avoid
-information leakage). A compact **multi-layer perceptron (MLP)** — fully-connected layers of
-32 and 16 units with ReLU activations and dropout, ending in a single logit — maps this
-vector to the probability of cyberbullying (**Figure 3.6**).
+Stage 2 (`train_stage2.py`) makes the final decision for each relationship. The feature vector from
+Table 3.3 is assembled, the two users' genders one-hot encoded, and everything standardised using
+statistics from the **training split only**, to avoid leakage. A small **multi-layer perceptron** —
+fully-connected layers of 32 and 16 units, ReLU and dropout, ending in one logit — maps the vector
+to a cyberbullying probability (Figure 3.6).
 
-Because only about 10.4% of pairs are positive, the loss uses a **positive class weight**
-equal to the ratio of negative to positive examples, so that the rare cyberbullying cases are
-not ignored. The data is split with **stratification** to preserve this ratio across the
-training and test sets. This stage is deliberately lightweight: once the pair features are
-available, it trains in seconds on a CPU, and the trained classifier (mean/standard-deviation
-normalisation statistics, feature names and weights) is saved to `cb_classifier.pth` for use
-in the end-to-end pipeline.
+Because only about 10.4% of pairs are positive, the loss carries a **positive class weight** equal
+to the negative-to-positive ratio, so the rare bullying cases are not ignored, and the split is
+**stratified** to keep that ratio in both training and test. This stage is intentionally light:
+once the features exist, it trains in seconds on a CPU, and the trained model (normalisation
+statistics, feature names, weights) is saved to `cb_classifier.pth` for the full pipeline.
 
-> **Figure 3.6.** Stage 2 architecture: a dense neural network mapping the standardised
-> pair-level feature vector to a cyberbullying probability, trained with a positive-class
-> weight to counter the 10.4% positive rate. *(Figure to be inserted.)*
+> **Figure 3.6.** Stage 2 architecture: a dense network mapping the standardised pair-level vector
+> to a cyberbullying probability, trained with a positive-class weight to counter the 10.4%
+> positive rate.
 
 ## 3.9 Evaluation Metrics
 
-Because both stages operate on **imbalanced** data, accuracy alone is an inadequate and
-potentially misleading measure: a model that predicts the majority class for every input can
-report a high accuracy while detecting nothing of interest (Section 4.6). The system is
-therefore evaluated using the full set of metrics defined in **Table 3.4**, computed from the
-counts of true positives (TP), false positives (FP), true negatives (TN) and false negatives
-(FN). **Recall** is given particular weight, since in a safety-critical setting the cost of
-*missing* a genuine case of cyberbullying (a false negative) is generally higher than that of
+Since both stages work on **imbalanced** data, accuracy on its own is misleading — a model that
+always predicts the majority class can post a high accuracy while catching nothing (Section 4.6).
+So the system is judged with the full set of metrics in **Table 3.4**, computed from true positives
+(TP), false positives (FP), true negatives (TN) and false negatives (FN). **Recall** gets extra
+weight, because in a safety setting *missing* a real case (a false negative) usually costs more than
 a false alarm.
 
 **Table 3.4.** Evaluation metrics and their definitions.
@@ -334,20 +291,17 @@ a false alarm.
 | Recall (Sensitivity) | TP / (TP + FN) | Of all true bullying cases, how many are caught |
 | F1-Score | 2 · (Precision · Recall) / (Precision + Recall) | Harmonic mean; balanced single-number summary |
 
-In addition, **confusion matrices** are reported for both stages to expose the full breakdown
-of correct and incorrect predictions per class.
+**Confusion matrices** are also reported for both stages to show the full per-class breakdown.
 
 ## 3.10 Experimental Setup and Implementation Details
 
-The system is implemented in **Python** using **PyTorch** and the Hugging Face
-**Transformers** library, with **scikit-learn** for data splitting and metrics and
-**pandas** for data preparation. The two transformer variants — `bert-base-multilingual-cased`
-and `google/muril-base-cased` — are selected through a single configuration switch. The main
-training hyperparameters are summarised in **Table 3.5**. Stage 1 fine-tuning was performed on
-GPU (Kaggle T4) owing to the size of the transformer and the corpus, while Stage 2 trains in
-seconds on CPU. Data is partitioned into training, validation and test splits with a fixed
-random seed for reproducibility, and the validation split is used for early stopping during
-Stage 1 fine-tuning.
+The system is written in **Python** with **PyTorch** and Hugging Face **Transformers**, plus
+**scikit-learn** for splitting and metrics and **pandas** for data prep. A single config switch
+chooses between `bert-base-multilingual-cased` and `google/muril-base-cased`. The main
+hyperparameters are in **Table 3.5**. Stage 1 fine-tuning ran on GPU (Kaggle T4), given the size of
+the model and corpus, while Stage 2 trains in seconds on CPU. Data is split into train, validation
+and test with a fixed seed for reproducibility, and the validation split drives early stopping in
+Stage 1.
 
 **Table 3.5.** Training configuration and hyperparameters.
 
@@ -365,42 +319,35 @@ Stage 1 fine-tuning.
 
 ## 3.11 Web Demonstration Application
 
-To make the system usable and to demonstrate it to a non-technical audience, the trained
-pipeline is wrapped in an interactive **web demonstration** (`demo.py`). A user enters a
-message (in English, Roman Urdu or code-switched text); Stage 1 returns the aggression
-probability, the intent scorer highlights any harmful cues, and — given a conversation
-history — the Stage 2 model reports the relationship-level cyberbullying decision. This
-demonstrates real-time, multilingual operation and makes the model's reasoning visible rather
-than hidden behind a command line.
+To make the system usable and easy to show to a non-technical audience, the trained pipeline is
+wrapped in an interactive **web app** (`demo.py`). A user types a message (English, Roman Urdu or
+mixed); Stage 1 returns the aggression probability, the intent scorer highlights any harmful cues,
+and — given a short conversation — the Stage 2 model reports the relationship-level decision. It
+runs in real time, works across languages, and makes the model's reasoning visible instead of
+hiding it behind a command line.
 
 ## 3.12 Stage 3 — Multimodal Image-and-Text Component
 
-Cyberbullying online is not confined to plain text: a large share of abusive content
-takes the form of **memes**, in which an image and a short caption together convey a
-hostile or humiliating message. To extend the framework toward this modality — and to
-address the image-based dimension of the original proposal — a third, **multimodal**
-classifier was implemented in which each sample consists of an image together with its
-overlaid text. This component is exploratory and is evaluated separately from the
-conversational text system; its results and limitations are reported in Section 4.7.
+Cyberbullying is not only text. A lot of it travels as **memes**, where an image and a short caption
+together carry the hostile message. To reach that modality — and to cover the image side of the
+original proposal — a third, **multimodal** component was built, taking an image together with its
+overlaid text. It is a separate module, evaluated apart from the conversational system; its results
+appear in Section 4.7.
 
-The architecture (`fusion_model.py`) encodes the two modalities with complementary
-backbones and combines them through attention (**Figure 3.7**):
+A first version paired a fully fine-tuned **ResNet50** image encoder with **m-BERT** for the text
+and fused them with an attention layer (Figure 3.7). On a few thousand memes it overfitted badly and
+tended to collapse toward the majority class. That lesson led to a stronger, more stable design
+based on **CLIP** (Contrastive Language–Image Pre-training) [38], which learns images and text in a
+shared space. In this version the CLIP backbone is **frozen** and only a small head is trained on
+top of its image and text embeddings — the standard recipe for limited data, and the one that avoids
+the earlier overfitting. Three variants are trained — text-only, image-only and fusion (the
+concatenated image and text embeddings) — so the value of combining the two can be measured.
 
-- **Image branch.** A **ResNet50** convolutional network, pretrained on ImageNet,
-  encodes the meme image into a 2048-dimensional visual feature vector.
-- **Text branch.** The same multilingual transformer used in Stage 1
-  (**m-BERT / MuRIL**) encodes the meme's text into a 768-dimensional embedding.
-- **Attention fusion.** Each modality is projected to a common 512-dimensional space,
-  and a learned **attention layer** computes a weighted combination of the two, so the
-  model can rely on whichever modality is more informative for a given sample. A dense
-  classification head then predicts **bullying / not bullying**.
+The component is trained on the **Hateful Memes** benchmark [39], which is built so that neither the
+image nor the text alone is enough. Since this data shares no users with the conversational set, it
+is a **standalone experiment** that complements, but does not replace, the two-stage text system at
+the core of this thesis.
 
-The component was trained on the publicly available **Memotion** meme dataset (6,992
-memes, of which 4,279 carry an offensive label that is treated here as the positive
-class). Because the meme dataset shares no users with the conversational data, it is a
-**standalone experiment** rather than a fusion over the same samples; it complements,
-but does not replace, the two-stage text system that forms the core of this thesis.
-
-> **Figure 3.7.** Stage 3 multimodal architecture: ResNet50 (image) and m-BERT / MuRIL
-> (text) features combined by an attention layer for a binary bullying decision.
-> *(Figure to be inserted.)*
+> **Figure 3.7.** Initial Stage 3 architecture: ResNet50 (image) and m-BERT / MuRIL (text) features
+> combined by an attention layer. This version was later replaced by the frozen-CLIP design of
+> Section 4.7.
